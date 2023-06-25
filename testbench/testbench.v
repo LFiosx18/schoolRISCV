@@ -1,19 +1,9 @@
-/*
- * schoolRISCV - small RISC-V CPU 
- *
- * originally based on Sarah L. Harris MIPS CPU 
- *                   & schoolMIPS project
- * 
- * Copyright(c) 2017-2020 Stanislav Zhelnio 
- *                        Aleksandr Romanov 
- */ 
-
 `timescale 1 ns / 100 ps
 
 `include "sr_cpu.vh"
 
 `ifndef SIMULATION_CYCLES
-    `define SIMULATION_CYCLES 120
+    `define SIMULATION_CYCLES 7000
 `endif
 
 module sm_testbench;
@@ -35,7 +25,7 @@ module sm_testbench;
         .clkDivide ( 4'b0    ),
         .clkEnable ( 1'b1    ),
         .clk       ( cpuClk  ),
-        .regAddr   ( 5'b0    ),
+        .regAddr   ( 32'b0    ),
         .regData   (         )
     );
 
@@ -77,17 +67,20 @@ module sm_testbench;
         reg [31:0] immU;
 
     begin
-        cmdOp = sm_top.sm_cpu.cmdOp;
-        rd    = sm_top.sm_cpu.rd;
-        cmdF3 = sm_top.sm_cpu.cmdF3;
-        rs1   = sm_top.sm_cpu.rs1;
-        rs2   = sm_top.sm_cpu.rs2;
-        cmdF7 = sm_top.sm_cpu.cmdF7;
-        immI  = sm_top.sm_cpu.immI;
-        immB  = sm_top.sm_cpu.immB;
-        immU  = sm_top.sm_cpu.immU;
+        cmdOp = sm_top.sm_cpu.decode.cmdOpW;
+        rd    = sm_top.sm_cpu.decode.rd_o;
+        cmdF3 = sm_top.sm_cpu.decode.cmdF3W;
+        rs1   = sm_top.sm_cpu.decode.rs1W;
+        rs2   = sm_top.sm_cpu.decode.rs2W;
+        cmdF7 = sm_top.sm_cpu.decode.cmdF7W;
+        immI  = sm_top.sm_cpu.decode.immI_o;
+        immB  = sm_top.sm_cpu.decode.immBW;
+        immU  = sm_top.sm_cpu.decode.immU_o;
 
-        $write("   ");
+        if (cmdF3 == `RVF3_ADDI && cmdOp == `RVOP_ADDI && rs1 == 0 && rs2 == 0) $write ("nop");
+        else
+
+        //$write(" Opcode $%b , cmdf3 $%b , cmdf7 $%b ",cmdOp, cmdF3, cmdF7);
         casez( { cmdF7, cmdF3, cmdOp } )
             default :                                $write ("new/unknown");
             { `RVF7_ADD,  `RVF3_ADD,  `RVOP_ADD  } : $write ("add   $%1d, $%1d, $%1d", rd, rs1, rs2);
@@ -100,9 +93,9 @@ module sm_testbench;
             { `RVF7_ANY,  `RVF3_ANY,  `RVOP_LUI  } : $write ("lui   $%1d, 0x%8h",      rd, immU);
             { `RVF7_ANY,  `RVF3_ANDI, `RVOP_ANDI } : $write ("andi  $%1d, $%1d, 0x%8h",rd, rs1, immI);
 
-            { `RVF7_ANY,  `RVF3_BEQ,  `RVOP_BEQ  } : $write ("beq   $%1d, $%1d, 0x%8h (%1d)", rs1, rs2, immB, immB);
-            { `RVF7_ANY,  `RVF3_BNE,  `RVOP_BNE  } : $write ("bne   $%1d, $%1d, 0x%8h (%1d)", rs1, rs2, immB, immB);
+            { `RVF7_ANY,  `RVF3_ANY,  `RVOP_FUNC  } : $write ("myfun   $%1d, $%b, $%b", rd, sm_top.sm_cpu.decode.instrR[19:12], sm_top.sm_cpu.decode.instrR[27:20]);
         endcase
+
     end
     endtask
 
@@ -110,10 +103,15 @@ module sm_testbench;
     //simulation debug output
     integer cycle; initial cycle = 0;
 
+    reg finish = 0;
     always @ (posedge clk)
     begin
-        $write ("%5d  pc = %2h instr = %h   a0 = %1d   a1 = %1d   a2 = %1d", 
-                  cycle, sm_top.sm_cpu.pc, sm_top.sm_cpu.instr, sm_top.sm_cpu.rf.rf[10], sm_top.sm_cpu.rf.rf[11], sm_top.sm_cpu.rf.rf[12]);
+        $write ("%5d  pc = %2h ", cycle, sm_top.sm_cpu.fetch.pc_o);
+
+        if (sm_top.sm_cpu.fetch.instr_o !== 32'bX) $write("instr = %h ", sm_top.sm_cpu.fetch.instr_o);
+        else $write("instr = 00000013 ");
+
+        $write ("a0 = 0x%8h a1 = 0x%8h   :   ",sm_top.sm_cpu.sm_register_file.rf[10], sm_top.sm_cpu.sm_register_file.rf[11]);
 
         disasmInstr();
 
@@ -121,12 +119,16 @@ module sm_testbench;
 
         cycle = cycle + 1;
 
-        if (cycle > `SIMULATION_CYCLES)
+
+        if ((sm_top.sm_cpu.fetch.instr_o === 32'bX) && (sm_top.sm_cpu.fetch.pc_o !== 32'bX) && !sm_top.sm_cpu.conflict_prevention.freeze)
         begin
-            cycle = 0;
-            $display ("Timeout");
-            $stop;
+            if (finish) begin
+                $display ("Timeout");
+                $stop;
+            end  
+            finish <= 1;
         end
+        
     end
 
 endmodule

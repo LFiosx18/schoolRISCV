@@ -27,6 +27,7 @@
 `define RVOP_SLTU   7'b0110011
 `define RVOP_SUB    7'b0110011
 `define RVOP_ANDI   7'b0010011
+`define RVOP_FUNC   7'b1111111
 
 // instruction funct3
 `define RVF3_ADDI   3'b000

@@ -17,7 +17,8 @@ module sm_rom
     output [31:0] rd
 );
     reg [31:0] rom [SIZE - 1:0];
-    assign rd = rom [a];
+    wire [31:0] shift = a >> 2;
+    assign rd = rom [shift];
 
     initial begin
         $readmemh ("program.hex", rom);
